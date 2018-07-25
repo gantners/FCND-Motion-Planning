@@ -12,7 +12,6 @@ from udacidrone import Drone
 from udacidrone.connection import MavlinkConnection, WebSocketConnection  # noqa: F401
 from udacidrone.messaging import MsgID
 
-
 class States(Enum):
     MANUAL = 0
     ARMING = 1
@@ -69,11 +68,6 @@ class BackyardFlyer(Drone):
                 if ~self.armed & ~self.guided:
                     self.manual_transition()
 
-    def calculate_box(self):
-        print("Setting Home")
-        local_waypoints = [[10.0, 0.0, 3.0], [10.0, 10.0, 3.0], [0.0, 10.0, 3.0], [0.0, 0.0, 3.0]]
-        return local_waypoints
-
     def arming_transition(self):
         print("arming transition")
         self.take_control()
@@ -129,6 +123,11 @@ class BackyardFlyer(Drone):
         #    pass
 
         self.stop_log()
+
+    def calculate_box(self):
+        print("Setting Home")
+        local_waypoints = [[10.0, 0.0, 3.0], [10.0, 10.0, 3.0], [0.0, 10.0, 3.0], [0.0, 0.0, 3.0]]
+        return local_waypoints
 
 
 if __name__ == "__main__":

@@ -21,7 +21,6 @@ class States(Enum):
     DISARMING = auto()
     PLANNING = auto()
 
-
 class MotionPlanning(Drone):
 
     def __init__(self, connection):
