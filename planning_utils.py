@@ -1,7 +1,8 @@
 from enum import Enum
 from queue import PriorityQueue
 import numpy as np
-
+import math
+from bresenham import bresenham
 
 def create_grid(data, drone_altitude, safety_distance):
     """
@@ -40,7 +41,7 @@ def create_grid(data, drone_altitude, safety_distance):
 
     return grid, int(north_min), int(east_min)
 
-
+# TODO: Criteria 5: add at least diagonal motions with a cost of sqrt(2) to your A* implementation
 # Assume all actions cost the same.
 class Action(Enum):
     """
@@ -55,6 +56,10 @@ class Action(Enum):
     EAST = (0, 1, 1)
     NORTH = (-1, 0, 1)
     SOUTH = (1, 0, 1)
+    NORTHWEST = (-1, -1, math.sqrt(2))
+    SOUTHWEST = (1, -1, math.sqrt(2))
+    NORTHEAST = (-1, 1, math.sqrt(2))
+    SOUTHEAST = (1, 1, math.sqrt(2))
 
     @property
     def cost(self):
@@ -84,6 +89,15 @@ def valid_actions(grid, current_node):
         valid_actions.remove(Action.WEST)
     if y + 1 > m or grid[x, y + 1] == 1:
         valid_actions.remove(Action.EAST)
+
+    if x - 1 < 0 or y - 1 < 0 or grid[x - 1, y - 1] == 1:
+        valid_actions.remove(Action.NORTHWEST)
+    if x - 1 < 0 or y + 1 > m or grid[x - 1, y + 1] == 1:
+        valid_actions.remove(Action.NORTHEAST)
+    if x + 1 > n or y - 1 < 0 or grid[x + 1, y - 1] == 1:
+        valid_actions.remove(Action.SOUTHWEST)
+    if x + 1 > n or y + 1 > m or grid[x + 1, y + 1] == 1:
+        valid_actions.remove(Action.SOUTHEAST)
 
     return valid_actions
 
@@ -142,5 +156,82 @@ def a_star(grid, h, start, goal):
 
 
 def heuristic(position, goal_position):
-    return np.linalg.norm(np.array(position) - np.array(goal_position))
+    x, y = position
+    gx, gy = goal_position
+    dx = abs(x - gx)
+    dy = abs(y - gy)
+    D = 1
+    D2 = 2
 
+    #return np.linalg.norm(np.array(position) - np.array(goal_position))
+
+    # euclidean distance
+    #return D * math.sqrt(dx * dx + dy * dy)
+
+    #http://en.wikipedia.org/wiki/Chebyshev_distance
+    return D * (dx + dy) + (D2 - 2 * D) * min(dx, dy)
+
+def point(p):
+    return np.array([p[0], p[1], 1.]).reshape(1, -1)
+
+def collinearity_check(p1, p2, p3, epsilon=1e-3):
+    m = np.concatenate((p1, p2, p3), 0)
+    det = np.linalg.det(m)
+    return abs(det) < epsilon
+
+
+def collinearity_check3D(p1, p2, p3, epsilon=1e-6):
+    collinear = False
+    # TODO: Create the matrix out of three points
+    mat = np.vstack((p1, p2, p3))
+    # TODO: Calculate the determinant of the matrix.
+    det = np.linalg.det(mat)
+    # TODO: Set collinear to True if the determinant is less than epsilon
+    if det < epsilon:
+        collinear = True
+
+    return collinear
+
+def prune_path(path):
+    pruned_path = [p for p in path]
+    i = 0
+    while i < len(pruned_path) - 2:
+        p1 = point(pruned_path[i])
+        p2 = point(pruned_path[i + 1])
+        p3 = point(pruned_path[i + 2])
+
+        # If the 3 points are in a line remove
+        # the 2nd point.
+        # The 3rd point now becomes and 2nd point
+        # and the check is redone with a new third point
+        # on the next iteration.
+        if collinearity_check3D(p1, p2, p3):
+            # Something subtle here but we can mutate
+            # `pruned_path` freely because the length
+            # of the list is check on every iteration.
+            pruned_path.remove(pruned_path[i + 1])
+        else:
+            i += 1
+    return pruned_path
+
+def prune_path_bresenham(path, grid):
+    # removed all unecesary waypoints
+    cut_path = [p for p in path]
+    i = 0
+    while i < len(cut_path) - 2:
+        print(i)
+        x1, y1 = cut_path[i]
+        x3, y3 = cut_path[i + 2]
+        points = list(bresenham(x1, y1, x3, y3))
+
+        found = False
+        for p in points:
+            if grid[p[0]][p[1]] == 1:
+                i += 1
+                found = True
+                break
+        #we can remove all in between
+        if not found:
+            cut_path.remove(cut_path[i + 1])
+    print("Cut path to {0}".format(len(cut_path)))
+    return cut_path

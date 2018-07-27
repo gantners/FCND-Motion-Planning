@@ -2,14 +2,15 @@ import argparse
 import time
 import msgpack
 from enum import Enum, auto
-
+import csv
 import numpy as np
-
-from planning_utils import a_star, heuristic, create_grid
+import math
+from planning_utils import a_star, heuristic, create_grid, prune_path, prune_path_bresenham
 from udacidrone import Drone
 from udacidrone.connection import MavlinkConnection
 from udacidrone.messaging import MsgID
-from udacidrone.frame_utils import global_to_local
+from udacidrone.frame_utils import global_to_local, local_to_global
+from random import randint
 
 
 class States(Enum):
@@ -26,6 +27,7 @@ class MotionPlanning(Drone):
     def __init__(self, connection):
         super().__init__(connection)
 
+        self.global_goal =  np.array([-122.393993,37.796917, 0])
         self.target_position = np.array([0.0, 0.0, 0.0])
         self.waypoints = []
         self.in_mission = True
@@ -86,7 +88,8 @@ class MotionPlanning(Drone):
         print("waypoint transition")
         self.target_position = self.waypoints.pop(0)
         print('target position', self.target_position)
-        self.cmd_position(self.target_position[0], self.target_position[1], self.target_position[2], self.target_position[3])
+        self.cmd_position(self.target_position[0], self.target_position[1], self.target_position[2],
+                          self.target_position[3])
 
     def landing_transition(self):
         self.flight_state = States.LANDING
@@ -117,45 +120,69 @@ class MotionPlanning(Drone):
         SAFETY_DISTANCE = 5
 
         self.target_position[2] = TARGET_ALTITUDE
+        init_lat = 0
+        init_lon = 0
 
         # TODO: read lat0, lon0 from colliders into floating point values
-        
-        # TODO: set home position to (lon0, lat0, 0)
+        with open('colliders.csv') as csvDataFile:
+            csvReader = csv.reader(csvDataFile)
+            for row in csvReader:
+                init_lat = float(row[0].split()[1])
+                init_lon = float(row[1].split()[1])
+                break
 
-        # TODO: retrieve current global position
- 
-        # TODO: convert to current local position using global_to_local()
-        
+        # TODO: Criteria 1: set home position to (lon0, lat0, 0)
+        self.set_home_position(init_lon, init_lat, 0)
+        print("Home position:", init_lon, ",", init_lat, ",0")
+
+        # TODO: Criteria 2: retrieve current global position lon lat up
+        gps = [self._longitude, self._latitude, self._altitude]
+        print("Current gps: ", gps)
+
+        # TODO: Criteria 2: convert to current local position using global_to_local() north east down
+        print("Global home:", self.global_home[0], ",", self.global_home[1], ",", self.global_home[2])
+        current_local = global_to_local(self.global_position, self.global_home)
+        print("Current local position: ", current_local)
         print('global home {0}, position {1}, local position {2}'.format(self.global_home, self.global_position,
                                                                          self.local_position))
         # Read in obstacle map
         data = np.loadtxt('colliders.csv', delimiter=',', dtype='Float64', skiprows=2)
-        
+
         # Define a grid for a particular altitude and safety margin around obstacles
         grid, north_offset, east_offset = create_grid(data, TARGET_ALTITUDE, SAFETY_DISTANCE)
         print("North offset = {0}, east offset = {1}".format(north_offset, east_offset))
+
+        # TODO: Criteria 3: convert start position to current position rather than map center
         # Define starting point on the grid (this is just grid center)
-        grid_start = (-north_offset, -east_offset)
-        # TODO: convert start position to current position rather than map center
-        
+        grid_start = (int(current_local[0] - north_offset), int(current_local[1] - east_offset))
+        print("North east cleaned = {0}, east offset = {1}".format(grid_start[0], grid_start[1]))
+        print("Grid size: ", len(grid), "x", len(grid[0]))
+
         # Set goal as some arbitrary position on the grid
-        grid_goal = (-north_offset + 10, -east_offset + 10)
-        # TODO: adapt to set goal as latitude / longitude position and convert
+        # TODO Criteria 4: arbitrary target adapt to set goal as latitude / longitude position and convert
+        goal_position = global_to_local(self.global_goal, self.global_home)
+        grid_goal = (int(goal_position[0] - north_offset), int(goal_position[1] - east_offset))
+        print("Random grid goal: ", grid_goal)
 
         # Run A* to find a path from start to goal
-        # TODO: add diagonal motions with a cost of sqrt(2) to your A* implementation
         # or move to a different search space such as a graph (not done here)
         print('Local Start and Goal: ', grid_start, grid_goal)
-        path, _ = a_star(grid, heuristic, grid_start, grid_goal)
-        # TODO: prune path to minimize number of waypoints
-        # TODO (if you're feeling ambitious): Try a different approach altogether!
 
-        # Convert path to waypoints
-        waypoints = [[p[0] + north_offset, p[1] + east_offset, TARGET_ALTITUDE, 0] for p in path]
-        # Set self.waypoints
-        self.waypoints = waypoints
-        # TODO: send waypoints to sim (this is just for visualization of waypoints)
-        self.send_waypoints()
+        path, _ = a_star(grid, heuristic, grid_start, grid_goal)
+        print("Path {0}".format(len(path)))
+
+        if len(path) > 0:
+            # TODO: Criteria 6: prune path to minimize number of waypoints
+            pruned_path = prune_path_bresenham(path,grid)
+            # TODO (if you're feeling ambitious): Try a different approach altogether!
+
+            # TODO: Criteria 7: send waypoints to sim (this is just for visualization of waypoints)
+            # Convert path to waypoints
+            waypoints = [[p[0] + north_offset, p[1] + east_offset, TARGET_ALTITUDE, 0] for p in pruned_path]
+
+            # Set self.waypoints
+            self.waypoints = waypoints
+            self.send_waypoints()
 
     def start(self):
         self.start_log("Logs", "NavLog.txt")
@@ -168,7 +195,6 @@ class MotionPlanning(Drone):
         #    pass
 
         self.stop_log()
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

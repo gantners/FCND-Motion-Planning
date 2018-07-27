@@ -26,7 +26,7 @@ Outlining the changes which have been done to `backyard_flyer_solution.py`:
 
 -  Variable `all_waypoints` has been renamed to just `waypoints`
 
-- waypoints are not calculated anymore over the `calculate_box()` function, instead they shall be filled later as TODO
+- waypoints are not calculated anymore over the `calculate_box()` function, which mapped out a square path of 10m north, 10m east, 10m south and back 10m west 3m above the ground. Instead they shall be filled later as TODO
 
 - The method `state_callback(self)` now handles the new State `PLANNING` which takes place after the State `ARMING` and is set at
 the `plan_path()` function after successful arming
@@ -53,23 +53,33 @@ the function `self.takeoff()` is called, that means while takeoff we are in Stat
 
 ## Implementing Your Path Planning Algorithm
 
-### Criteria 2
+### Criteria 1
 In the starter code, we assume that the home position is where the drone first initializes, but in reality you need to be able to start planning from anywhere. Modify your code to read the global home location from the first line of the colliders.csv file and set that position as global home (self.set_home_position())
+[See motion_planning.py](./motion_planning.py#134)
 
-### Criteria 3 
+### Criteria 2 
 In the starter code, we assume the drone takes off from map center, but you'll need to be able to takeoff from anywhere. Retrieve your current position in geodetic coordinates from self._latitude, self._longitude and self._altitude. Then use the utility function global_to_local() to convert to local position (using self.global_home as well, which you just set)
+[See motion_planning.py](./motion_planning.py#138)
+
+### Criteria 3
+In the starter code, the start point for planning is hardcoded as map center. Change this to be your current local position.
+[See motion_planning.py](./motion_planning.py#155)
 
 ### Criteria 4
-In the starter code, the start point for planning is hardcoded as map center. Change this to be your current local position.
+In the starter code, the goal position is hardcoded as some location 10 m north and 10 m east of map center. Modify this to be set as some arbitrary position on the grid given any geodetic coordinates (latitude, longitude)
+[See motion_planning.py](./motion_planning.py#162)
 
 ### Criteria 5
-In the starter code, the goal position is hardcoded as some location 10 m north and 10 m east of map center. Modify this to be set as some arbitrary position on the grid given any geodetic coordinates (latitude, longitude)
+Write your search algorithm. Minimum requirement here is to add diagonal motions to the A* implementation provided, and assign them a cost of sqrt(2). However, you're encouraged to get creative and try other methods from the lessons and beyond!
+[See planning_utils.py](./planning_utils.py#59) 4 diagonal actions have been added as well as code for checking off being off grid for those
 
 ### Criteria 6
-Write your search algorithm. Minimum requirement here is to add diagonal motions to the A* implementation provided, and assign them a cost of sqrt(2). However, you're encouraged to get creative and try other methods from the lessons and beyond!
+Cull waypoints from the path you determine using search.
+[See planning_utils.py](./planning_utils.py#217)   Bresenham algorithm was used for checking if we can remove unnecessary waypoints by testing if there is a path from point a to c without b which is not colliding with any obstacle on the grid.
+
 
 ### Criteria 7
-Cull waypoints from the path you determine using search.
-
-### Crtieria 8
 This is simply a check on whether it all worked. Send the waypoints and the autopilot should fly you from start to goal!
+[See motion_planning.py](./motion_planning.py#179) Planning works most of the time, except if A* does not find any valid path to goal.
+
+[To check just change motion_planning.py coordinates lon,lat to your desired coordinates](./motion_planning.py#30)
